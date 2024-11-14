@@ -30,3 +30,6 @@ compile_commands.json
 *.exe
 *.out
 focused_editor
+
+# Misc
+hello.cpp
