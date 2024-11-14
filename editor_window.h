@@ -1,10 +1,11 @@
 #pragma once
 
 #include <QMainWindow>
-#include <QTextEdit>
+#include "custom_editor.h"
 #include <QString>
 #include "code_highlighter.h"
 #include "indent_manager.h"
+#include "line_number_area.h"
 
 class EditorWindow : public QMainWindow {
     Q_OBJECT
@@ -15,10 +16,11 @@ public:
 protected:
     void closeEvent(QCloseEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void handleTextChanged();
-    void saveFile();
+    bool saveFile();
     void saveFileAs();
     void openFile();
     void toggleFullscreen();
@@ -27,20 +29,23 @@ private slots:
     void zoomOut();
     void resetZoom();
     void showPreferences();
+    void toggleLineNumbers();
+    void updateLineNumberAreaWidth();
+    void updateLineNumberArea(const QRect& rect, int dy);
 
 private:
     void initUI();
     void setupShortcuts();
     bool maybeSave();
     bool saveToFile(const QString& filePath);
-    bool loadFile(const QString& filePath);
+    void loadFile(const QString& filePath);
     void updateTitle();
     void updateZoom(int delta);
     void showSplashScreen();
     void hideSplashScreen();
     void updateSyntaxHighlighting();
 
-    QTextEdit* editor;
+    CustomEditor* editor;
     QString currentFile;
     bool unsavedChanges;
     int currentZoom;
@@ -51,4 +56,5 @@ private:
     bool showingSplash;
     CodeHighlighter* highlighter;
     IndentManager* indentManager;
+    LineNumberArea* lineNumberArea;
 };
