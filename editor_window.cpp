@@ -1,4 +1,5 @@
 #include "editor_window.h"
+#include "preferences_dialog.h"
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QShortcut>
@@ -11,11 +12,13 @@
 #include <QPalette>
 #include <QStyleHints>
 #include <QApplication>
+#include <QTextBlock>
 
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
     , unsavedChanges(false)
-    , currentZoom(13)
+    , currentZoom(13)  // Initialize directly instead of using defaultFontSize
+    , showingSplash(true)
 {
     initUI();
     setupShortcuts();
@@ -23,6 +26,8 @@ EditorWindow::EditorWindow(QWidget* parent)
     // Connect to system theme changes
     connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged,
             this, &EditorWindow::updateTheme);
+    
+    showSplashScreen();
 }
 
 void EditorWindow::initUI() {
@@ -36,14 +41,16 @@ void EditorWindow::initUI() {
     editor = new QTextEdit(this);
     editor->setFrameStyle(0);  // Remove frame
     
-    // Install event filter for wheel events
+    // Install event filters
     editor->viewport()->installEventFilter(this);
+    editor->installEventFilter(this);  // Add event filter to the editor itself
     
     // Set monospace font with fallbacks
     QFont font;
-    font.setFamilies(QStringList{"Menlo", "Monaco", "Courier New"});
+    font.setFamilies(QStringList{"SF Mono", "Menlo", "Monaco", "Courier New"});
     font.setFixedPitch(true);
-    font.setPointSize(13);
+    font.setStyleHint(QFont::Monospace);  // Ensure system will choose a monospace font if others fail
+    font.setPointSize(currentZoom);
     editor->setFont(font);
     
     // Initial theme setup
@@ -58,6 +65,59 @@ void EditorWindow::initUI() {
 
     // Connect text changed signal
     connect(editor, &QTextEdit::textChanged, this, &EditorWindow::handleTextChanged);
+}
+
+void EditorWindow::showSplashScreen() {
+    if (!currentFile.isEmpty()) return;
+    
+    editor->clear();
+    editor->setReadOnly(true);
+    showingSplash = true;
+    
+    QTextCursor cursor = editor->textCursor();
+    QTextBlockFormat blockFormat;
+    blockFormat.setAlignment(Qt::AlignCenter);
+    
+    cursor.movePosition(QTextCursor::Start);
+    
+    // Insert each line with proper centering
+    cursor.insertBlock(blockFormat);
+    cursor.insertText("Welcome to Focused Editor");
+    
+    cursor.insertBlock(blockFormat);
+    cursor.insertText("\n");
+    
+    cursor.insertBlock(blockFormat);
+    cursor.insertText("A minimalist text editor for distraction-free coding.");
+    
+    cursor.insertBlock(blockFormat);
+    cursor.insertText("\n");
+    
+    cursor.insertBlock(blockFormat);
+    cursor.insertText("Press Cmd+O to open a file");
+    
+    cursor.insertBlock(blockFormat);
+    cursor.insertText("- or -");
+    
+    cursor.insertBlock(blockFormat);
+    cursor.insertText("Start typing to create a new file");
+    
+    editor->setTextCursor(cursor);
+}
+
+void EditorWindow::hideSplashScreen() {
+    if (!showingSplash) return;
+    
+    editor->clear();
+    editor->setReadOnly(false);
+    showingSplash = false;
+}
+
+void EditorWindow::handleTextChanged() {
+    if (!showingSplash && !unsavedChanges) {
+        unsavedChanges = true;
+        updateTitle();
+    }
 }
 
 void EditorWindow::setupShortcuts() {
@@ -94,6 +154,25 @@ void EditorWindow::setupShortcuts() {
 
     auto resetZoomShortcut = new QShortcut(QKeySequence(tr("Ctrl+0")), this);
     connect(resetZoomShortcut, &QShortcut::activated, this, &EditorWindow::resetZoom);
+    
+    // Preferences shortcut
+    auto preferencesShortcut = new QShortcut(QKeySequence::Preferences, this);
+    connect(preferencesShortcut, &QShortcut::activated, this, &EditorWindow::showPreferences);
+}
+
+void EditorWindow::showPreferences() {
+    PreferencesDialog dialog(editor->font(), this);
+    connect(&dialog, &PreferencesDialog::fontChanged,
+            this, &EditorWindow::updateFont);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        updateFont(dialog.selectedFont());
+    }
+}
+
+void EditorWindow::updateFont(const QFont& font) {
+    editor->setFont(font);
+    currentZoom = font.pointSize();
 }
 
 void EditorWindow::updateTheme() {
@@ -150,13 +229,6 @@ void EditorWindow::updateTheme() {
     palette.setColor(QPalette::Base, QColor(backgroundColor));
     palette.setColor(QPalette::Text, QColor(textColor));
     QApplication::setPalette(palette);
-}
-
-void EditorWindow::handleTextChanged() {
-    if (!unsavedChanges) {
-        unsavedChanges = true;
-        updateTitle();
-    }
 }
 
 void EditorWindow::updateTitle() {
@@ -290,14 +362,36 @@ void EditorWindow::updateZoom(int delta) {
 }
 
 bool EditorWindow::eventFilter(QObject* obj, QEvent* event) {
-    if (obj == editor->viewport() && event->type() == QEvent::Wheel) {
-        QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
-        if (wheelEvent->modifiers() & Qt::ControlModifier) {
-            const int delta = wheelEvent->angleDelta().y();
-            updateZoom(delta > 0 ? 2 : -2);
-            return true;
+    if (obj == editor->viewport()) {
+        if (event->type() == QEvent::Wheel) {
+            QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
+            if (wheelEvent->modifiers() & Qt::ControlModifier) {
+                const int delta = wheelEvent->angleDelta().y();
+                updateZoom(delta > 0 ? 2 : -2);
+                return true;
+            }
         }
     }
+    
+    // Handle keyboard events for the editor
+    if (obj == editor && showingSplash) {
+        if (event->type() == QEvent::KeyPress) {
+            QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
+            
+            // Don't clear for modifier keys or special keys
+            if (!keyEvent->text().isEmpty() && 
+                !(keyEvent->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))) {
+                hideSplashScreen();
+                
+                // If it's a printable character, send it to the editor
+                if (keyEvent->text()[0].isPrint()) {
+                    editor->textCursor().insertText(keyEvent->text());
+                }
+                return true;
+            }
+        }
+    }
+    
     return QMainWindow::eventFilter(obj, event);
 }
 
