@@ -24,6 +24,7 @@ private slots:
     void zoomIn();
     void zoomOut();
     void resetZoom();
+    void showPreferences();
 
 private:
     void initUI();
@@ -33,13 +34,16 @@ private:
     bool loadFile(const QString& filePath);
     void updateTitle();
     void updateZoom(int delta);
+    void showSplashScreen();
+    void hideSplashScreen();
 
     QTextEdit* editor;
     QString currentFile;
     bool unsavedChanges;
-    int currentZoom;      // Stores current zoom level (in points)
+    int currentZoom;
     const int defaultFontSize = 13;
     const int minFontSize = 8;
     const int maxFontSize = 72;
-    const int zoomStep = 1;    // Font size change per zoom step
+    const int zoomStep = 1;
+    bool showingSplash;
 };

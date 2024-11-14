@@ -13,6 +13,8 @@
 #include <QStyleHints>
 #include <QApplication>
 #include <QTextBlock>
+#include <QDebug>
+#include <QScrollBar>
 
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -162,17 +164,62 @@ void EditorWindow::setupShortcuts() {
 
 void EditorWindow::showPreferences() {
     PreferencesDialog dialog(editor->font(), this);
-    connect(&dialog, &PreferencesDialog::fontChanged,
-            this, &EditorWindow::updateFont);
     
     if (dialog.exec() == QDialog::Accepted) {
-        updateFont(dialog.selectedFont());
+        QFont newFont = dialog.getSelectedFont();
+        qDebug() << "Current font:" << editor->font().family() << editor->font().pointSize();
+        qDebug() << "New font:" << newFont.family() << newFont.pointSize();
+        
+        // Save current state
+        QString content = editor->toPlainText();
+        int scrollValue = editor->verticalScrollBar()->value();
+        bool wasReadOnly = editor->isReadOnly();
+        bool wasShowingSplash = showingSplash;
+        
+        // Remove event filters and disconnect signals from old editor
+        editor->viewport()->removeEventFilter(this);
+        editor->removeEventFilter(this);
+        disconnect(editor, &QTextEdit::textChanged, this, &EditorWindow::handleTextChanged);
+        
+        // Create new editor with desired font
+        QTextEdit* newEditor = new QTextEdit(this);
+        newEditor->setFrameStyle(0);
+        newEditor->setFont(newFont);
+        newEditor->document()->setDefaultFont(newFont);
+        newEditor->setPlainText(content);
+        
+        // Copy settings from old editor
+        newEditor->verticalScrollBar()->setValue(scrollValue);
+        newEditor->setReadOnly(wasReadOnly);
+        
+        // Replace old editor in layout
+        QLayout* layout = centralWidget()->layout();
+        layout->replaceWidget(editor, newEditor);
+        
+        // Clean up old editor
+        editor->deleteLater();
+        editor = newEditor;
+        
+        // Set up event filters and signals for new editor
+        editor->viewport()->installEventFilter(this);
+        editor->installEventFilter(this);
+        connect(editor, &QTextEdit::textChanged, this, &EditorWindow::handleTextChanged);
+        
+        currentZoom = newFont.pointSize();
+        showingSplash = wasShowingSplash;
+        
+        qDebug() << "After setting - Font:" << editor->font().family() << editor->font().pointSize();
+        qDebug() << "Editor read-only:" << editor->isReadOnly();
+        qDebug() << "Showing splash:" << showingSplash;
+        
+        // Ensure editor is properly focused
+        editor->setFocus();
+        
+        // Move cursor to end
+        QTextCursor cursor = editor->textCursor();
+        cursor.movePosition(QTextCursor::End);
+        editor->setTextCursor(cursor);
     }
-}
-
-void EditorWindow::updateFont(const QFont& font) {
-    editor->setFont(font);
-    currentZoom = font.pointSize();
 }
 
 void EditorWindow::updateTheme() {

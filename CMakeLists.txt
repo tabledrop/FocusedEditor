@@ -13,6 +13,8 @@ add_executable(focused_editor
     main.cpp
     editor_window.cpp
     editor_window.h
+    preferences_dialog.cpp
+    preferences_dialog.h
 )
 
 target_link_libraries(focused_editor PRIVATE Qt6::Widgets)

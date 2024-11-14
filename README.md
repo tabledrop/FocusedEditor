@@ -13,6 +13,8 @@ A minimalist, distraction-free text editor built with Qt6 and C++. This editor i
 - Native macOS look and feel
 - System theme support (light/dark mode)
 - Text zoom functionality
+- Font customization through preferences
+- Vim-style welcome screen
 
 ## Requirements
 
@@ -55,8 +57,14 @@ The editor is designed to be keyboard-driven for minimal disruption to your writ
 | ⌘ + = or ⌘ + + | Zoom in |
 | ⌘ + - | Zoom out |
 | ⌘ + 0 | Reset zoom |
+| ⌘ + , | Open preferences |
 
-You can also use ⌘ + Mouse Wheel to zoom in and out.
+## Preferences
+
+Access the preferences menu using ⌘ + , to customize:
+- Font family (filtered to show only monospace fonts)
+- Font size
+- Live preview of font changes
 
 ## Design Philosophy
 
@@ -77,6 +85,8 @@ The codebase is organized into three main files:
 - `main.cpp`: Application entry point
 - `editor_window.h`: Editor window class declaration
 - `editor_window.cpp`: Editor window implementation
+- `preferences_dialog.h`: Preferences dialog declaration
+- `preferences_dialog.cpp`: Preferences dialog implementation
 
 ## Contributing
 
