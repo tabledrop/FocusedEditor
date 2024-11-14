@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QTextEdit>
 #include <QString>
+#include "code_highlighter.h"
 
 class EditorWindow : public QMainWindow {
     Q_OBJECT
@@ -36,6 +37,7 @@ private:
     void updateZoom(int delta);
     void showSplashScreen();
     void hideSplashScreen();
+    void updateSyntaxHighlighting();
 
     QTextEdit* editor;
     QString currentFile;
@@ -46,4 +48,5 @@ private:
     const int maxFontSize = 72;
     const int zoomStep = 1;
     bool showingSplash;
+    CodeHighlighter* highlighter;
 };
