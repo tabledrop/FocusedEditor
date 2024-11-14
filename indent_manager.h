@@ -4,6 +4,7 @@
 #include <QTextEdit>
 #include <QString>
 #include <QKeyEvent>
+#include <QMap>
 
 class IndentManager : public QObject {
     Q_OBJECT
@@ -23,11 +24,15 @@ private:
     bool handleTab();
     bool handleEnter();
     bool handleBackspace();
+    bool handleCharacter(QKeyEvent* event);
     QString getCurrentLineIndentation();
     bool shouldIncreaseIndent();
     bool shouldDecreaseIndent();
     int getIndentLevel(const QString& line);
     QString getIndentString() const;
+    void insertMatchingPair(const QString& opening, const QString& closing);
+    void formatBlock(const QString& opening);
+    bool isLanguageMode() const { return currentLanguage != None; }
 
     QTextEdit* editor;
     Language currentLanguage;
@@ -37,5 +42,14 @@ private:
     const QStringList pythonBlockStarters = {
         "if", "for", "while", "def", "class", "with",
         "try", "except", "finally", "elif", "else"
+    };
+
+    // Auto-pair mappings
+    const QMap<QString, QString> autoPairs = {
+        {"{", "}"},
+        {"(", ")"},
+        {"[", "]"},
+        {"\"", "\""},
+        {"'", "'"}
     };
 };

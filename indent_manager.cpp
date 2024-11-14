@@ -24,26 +24,154 @@ bool IndentManager::handleKeyPress(QKeyEvent* event) {
         case Qt::Key_Backspace:
             return handleBackspace();
         default:
-            return false;
+            return handleCharacter(event);
     }
 }
 
-QString IndentManager::getCurrentLineIndentation() {
+bool IndentManager::handleCharacter(QKeyEvent* event) {
+    if (!isLanguageMode() || event->text().isEmpty()) {
+        return false;
+    }
+
+    QString character = event->text();
     QTextCursor cursor = editor->textCursor();
-    QString line = cursor.block().text();
-    int indentCount = 0;
     
-    for (QChar c : line) {
-        if (c == ' ') {
-            indentCount++;
-        } else if (c == '\t') {
-            indentCount += spacesPerTab;
-        } else {
-            break;
+    // Handle quotes specially
+    if (character == "\"" || character == "'") {
+        // Check if we should skip over existing quote
+        if (!cursor.atEnd()) {
+            cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+            if (cursor.selectedText() == character) {
+                // Move cursor over the existing quote
+                cursor.clearSelection();
+                editor->setTextCursor(cursor);
+                return true;
+            }
+            cursor.movePosition(QTextCursor::PreviousCharacter);
+        }
+        // Always add pair for quotes
+        insertMatchingPair(character, character);
+        return true;
+    }
+    
+    // Check if this is a closing character (except quotes)
+    for (auto it = autoPairs.begin(); it != autoPairs.end(); ++it) {
+        if (it.key() != "\"" && it.key() != "'" && // Skip quotes in this check
+            character == it.value()) {  // If it's a closing character
+            // Check if the next character is already this closing character
+            if (!cursor.atEnd()) {
+                cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+                if (cursor.selectedText() == character) {
+                    // Move cursor over the existing character instead of inserting
+                    cursor.clearSelection();
+                    editor->setTextCursor(cursor);
+                    return true;
+                }
+                cursor.movePosition(QTextCursor::PreviousCharacter);
+            }
+            return false;  // Let the character be inserted normally
         }
     }
     
-    return QString(indentCount, ' ');
+    // Check if this is an opening character that needs auto-pairing
+    if (autoPairs.contains(character)) {
+        if (character == "{" && currentLanguage == CPP) {
+            formatBlock(character);
+            return true;
+        } else {
+            insertMatchingPair(character, autoPairs[character]);
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+void IndentManager::insertMatchingPair(const QString& opening, const QString& closing) {
+    QTextCursor cursor = editor->textCursor();
+    
+    // If text is selected, wrap it with the pair
+    if (cursor.hasSelection()) {
+        QString selectedText = cursor.selectedText();
+        cursor.beginEditBlock();
+        cursor.insertText(opening + selectedText + closing);
+        cursor.endEditBlock();
+    } else {
+        cursor.beginEditBlock();
+        cursor.insertText(opening + closing);
+        cursor.movePosition(QTextCursor::Left);
+        cursor.endEditBlock();
+        editor->setTextCursor(cursor);
+    }
+}
+
+void IndentManager::formatBlock(const QString& opening) {
+    QTextCursor cursor = editor->textCursor();
+    QString indent = getCurrentLineIndentation();
+    QString additionalIndent = getIndentString();
+    
+    cursor.beginEditBlock();
+    
+    // Insert opening brace
+    cursor.insertText(opening);
+    
+    // Insert newline and indented empty line
+    cursor.insertText("\n" + indent + additionalIndent);
+    
+    // Store this position for later
+    int contentPosition = cursor.position();
+    
+    // Insert newline and closing brace
+    cursor.insertText("\n" + indent + "}");
+    
+    // Move cursor back to the indented empty line
+    cursor.setPosition(contentPosition);
+    
+    cursor.endEditBlock();
+    editor->setTextCursor(cursor);
+}
+
+bool IndentManager::handleEnter() {
+    QTextCursor cursor = editor->textCursor();
+    QString currentIndent = getCurrentLineIndentation();
+    QString additionalIndent;
+    
+    // Check if we're between braces in C++
+    if (currentLanguage == CPP) {
+        QString line = cursor.block().text();
+        int cursorPos = cursor.positionInBlock();
+        
+        // Check if we're between braces
+        bool betweenBraces = false;
+        if (cursorPos > 0 && cursorPos < line.length()) {
+            if (line[cursorPos-1] == '{' && line[cursorPos] == '}') {
+                betweenBraces = true;
+            }
+        }
+        
+        if (betweenBraces) {
+            cursor.beginEditBlock();
+            // Insert newline and indent for content
+            cursor.insertText("\n" + currentIndent + getIndentString());
+            // Insert newline and indent for closing brace
+            cursor.insertText("\n" + currentIndent);
+            // Move cursor back to content line
+            cursor.movePosition(QTextCursor::Up);
+            cursor.endEditBlock();
+            editor->setTextCursor(cursor);
+            return true;
+        }
+    }
+    
+    if (shouldIncreaseIndent()) {
+        additionalIndent = getIndentString();
+    }
+    
+    cursor.beginEditBlock();
+    cursor.insertText("\n" + currentIndent + additionalIndent);
+    cursor.endEditBlock();
+    
+    return true;
 }
 
 bool IndentManager::shouldIncreaseIndent() {
@@ -122,22 +250,6 @@ bool IndentManager::handleTab() {
     }
 }
 
-bool IndentManager::handleEnter() {
-    QTextCursor cursor = editor->textCursor();
-    QString currentIndent = getCurrentLineIndentation();
-    QString additionalIndent;
-    
-    if (shouldIncreaseIndent()) {
-        additionalIndent = getIndentString();
-    }
-    
-    cursor.beginEditBlock();
-    cursor.insertText("\n" + currentIndent + additionalIndent);
-    cursor.endEditBlock();
-    
-    return true;
-}
-
 bool IndentManager::handleBackspace() {
     QTextCursor cursor = editor->textCursor();
     if (cursor.hasSelection()) {
@@ -172,4 +284,22 @@ bool IndentManager::handleBackspace() {
     }
     
     return false;
+}
+
+QString IndentManager::getCurrentLineIndentation() {
+    QTextCursor cursor = editor->textCursor();
+    QString line = cursor.block().text();
+    int indentCount = 0;
+    
+    for (QChar c : line) {
+        if (c == ' ') {
+            indentCount++;
+        } else if (c == '\t') {
+            indentCount += spacesPerTab;
+        } else {
+            break;
+        }
+    }
+    
+    return QString(indentCount, ' ');
 }
