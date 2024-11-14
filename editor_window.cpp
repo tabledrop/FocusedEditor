@@ -2,6 +2,7 @@
 #include "preferences_dialog.h"
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QAction>
 #include <QShortcut>
 #include <QKeySequence>
 #include <QFileDialog>
@@ -16,6 +17,7 @@
 #include <QScrollBar>
 #include <QSettings>
 #include "code_highlighter.h"
+#include "indent_manager.h"
 
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -30,15 +32,16 @@ EditorWindow::EditorWindow(QWidget* parent)
     setCentralWidget(central);
     
     QVBoxLayout* layout = new QVBoxLayout(central);
-    layout->setContentsMargins(11, 11, 11, 11);  
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     
     // Create and configure editor
     editor = new QTextEdit(this);
     editor->setFrameStyle(0);  // Remove frame
     
-    // Create syntax highlighter
+    // Create syntax highlighter and indent manager
     highlighter = new CodeHighlighter(editor->document());
+    indentManager = new IndentManager(editor, this);
     
     // Install event filters
     editor->viewport()->installEventFilter(this);
@@ -119,50 +122,67 @@ void EditorWindow::hideSplashScreen() {
 }
 
 void EditorWindow::handleTextChanged() {
-    if (!showingSplash && !unsavedChanges) {
-        unsavedChanges = true;
-        updateTitle();
+    if (!showingSplash) {  // Only mark changes when not showing splash screen
+        // Mark as unsaved only if the content actually changed
+        QString currentText = editor->toPlainText();
+        if (!currentFile.isEmpty()) {
+            QFile file(currentFile);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QString savedText = QTextStream(&file).readAll();
+                unsavedChanges = (currentText != savedText);
+                updateTitle();
+                file.close();
+            }
+        } else {
+            // For new files, mark as unsaved if there's any content
+            unsavedChanges = !currentText.isEmpty();
+            updateTitle();
+        }
     }
 }
 
 void EditorWindow::setupShortcuts() {
-    // Save
-    auto saveShortcut = new QShortcut(QKeySequence::Save, this);
-    connect(saveShortcut, &QShortcut::activated, this, &EditorWindow::saveFile);
-
-    // Save As
-    auto saveAsShortcut = new QShortcut(QKeySequence::SaveAs, this);
-    connect(saveAsShortcut, &QShortcut::activated, this, &EditorWindow::saveFileAs);
-
-    // Open
-    auto openShortcut = new QShortcut(QKeySequence::Open, this);
-    connect(openShortcut, &QShortcut::activated, this, &EditorWindow::openFile);
-
-    // Fullscreen
-    auto fullscreenShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this);
-    connect(fullscreenShortcut, &QShortcut::activated, this, &EditorWindow::toggleFullscreen);
-
-    // Quit
-    auto quitShortcut = new QShortcut(QKeySequence::Quit, this);
-    connect(quitShortcut, &QShortcut::activated, this, &QWidget::close);
-
-    // Zoom shortcuts
-    auto zoomInShortcut = new QShortcut(QKeySequence(tr("Ctrl+=")), this);
-    connect(zoomInShortcut, &QShortcut::activated, this, &EditorWindow::zoomIn);
+    // File operations
+    QAction* saveAction = new QAction(this);
+    saveAction->setShortcut(QKeySequence::Save);
+    connect(saveAction, &QAction::triggered, this, &EditorWindow::saveFile);
+    addAction(saveAction);  // This is crucial for the shortcut to work
     
-    // Alternative shortcut for plus key
-    auto zoomInShortcut2 = new QShortcut(QKeySequence(tr("Ctrl++")), this);
-    connect(zoomInShortcut2, &QShortcut::activated, this, &EditorWindow::zoomIn);
-
-    auto zoomOutShortcut = new QShortcut(QKeySequence(tr("Ctrl+-")), this);
-    connect(zoomOutShortcut, &QShortcut::activated, this, &EditorWindow::zoomOut);
-
-    auto resetZoomShortcut = new QShortcut(QKeySequence(tr("Ctrl+0")), this);
-    connect(resetZoomShortcut, &QShortcut::activated, this, &EditorWindow::resetZoom);
+    QAction* openAction = new QAction(this);
+    openAction->setShortcut(QKeySequence::Open);
+    connect(openAction, &QAction::triggered, this, &EditorWindow::openFile);
+    addAction(openAction);
     
-    // Preferences shortcut
-    auto preferencesShortcut = new QShortcut(QKeySequence::Preferences, this);
-    connect(preferencesShortcut, &QShortcut::activated, this, &EditorWindow::showPreferences);
+    // Preferences
+    QAction* prefsAction = new QAction(this);
+    prefsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
+    connect(prefsAction, &QAction::triggered, this, &EditorWindow::showPreferences);
+    addAction(prefsAction);
+    
+    // View operations
+    QAction* fullscreenAction = new QAction(this);
+    fullscreenAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F));
+    connect(fullscreenAction, &QAction::triggered, this, &EditorWindow::toggleFullscreen);
+    addAction(fullscreenAction);
+    
+    QAction* zoomInAction = new QAction(this);
+    zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    connect(zoomInAction, &QAction::triggered, this, &EditorWindow::zoomIn);
+    addAction(zoomInAction);
+    
+    QAction* zoomOutAction = new QAction(this);
+    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    connect(zoomOutAction, &QAction::triggered, this, &EditorWindow::zoomOut);
+    addAction(zoomOutAction);
+    
+    QAction* resetZoomAction = new QAction(this);
+    resetZoomAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+    connect(resetZoomAction, &QAction::triggered, this, &EditorWindow::resetZoom);
+    addAction(resetZoomAction);
+    
+    // Debug: Print available shortcuts
+    qDebug() << "Save shortcut:" << QKeySequence::Save;
+    qDebug() << "Open shortcut:" << QKeySequence::Open;
 }
 
 void EditorWindow::showPreferences() {
@@ -230,15 +250,22 @@ void EditorWindow::showPreferences() {
 void EditorWindow::updateSyntaxHighlighting() {
     if (!currentFile.isEmpty()) {
         QString extension = QFileInfo(currentFile).suffix().toLower();
+        CodeHighlighter::Language hlLang = CodeHighlighter::None;
+        IndentManager::Language indentLang = IndentManager::None;
+        
         if (extension == "cpp" || extension == "h" || extension == "hpp" || extension == "c" || extension == "cc") {
-            highlighter->setLanguage(CodeHighlighter::CPP);
+            hlLang = CodeHighlighter::CPP;
+            indentLang = IndentManager::CPP;
         } else if (extension == "py") {
-            highlighter->setLanguage(CodeHighlighter::Python);
-        } else {
-            highlighter->setLanguage(CodeHighlighter::None);
+            hlLang = CodeHighlighter::Python;
+            indentLang = IndentManager::Python;
         }
+        
+        highlighter->setLanguage(hlLang);
+        indentManager->setLanguage(indentLang);
     } else {
         highlighter->setLanguage(CodeHighlighter::None);
+        indentManager->setLanguage(IndentManager::None);
     }
 }
 
@@ -347,44 +374,66 @@ void EditorWindow::updateTheme() {
 
 void EditorWindow::updateTitle() {
     QString title = "Focused Editor";
+    
     if (!currentFile.isEmpty()) {
         QFileInfo fileInfo(currentFile);
         title = fileInfo.fileName() + " - " + title;
     }
+    
     if (unsavedChanges) {
         title = "*" + title;
     }
+    
     setWindowTitle(title);
 }
 
 void EditorWindow::saveFile() {
+    qDebug() << "Save file triggered, current unsavedChanges:" << unsavedChanges;  // Debug output
     if (currentFile.isEmpty()) {
-        saveFileAs();
+        saveFileAs();  // If no file path yet, prompt for save location
     } else {
-        saveToFile(currentFile);
+        saveToFile(currentFile);  // Save to existing file
     }
+    qDebug() << "Save completed, unsavedChanges:" << unsavedChanges;  // Debug output
 }
 
 void EditorWindow::saveFileAs() {
-    QString filePath = QFileDialog::getSaveFileName(this);
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        tr("Save File"),
+        QString(),
+        tr("All Files (*)")
+    );
+    
     if (!filePath.isEmpty()) {
         saveToFile(filePath);
     }
 }
 
 bool EditorWindow::saveToFile(const QString& filePath) {
+    qDebug() << "Saving to file:" << filePath;  // Debug output
+    
     QFile file(filePath);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream stream(&file);
-        stream << editor->toPlainText();
-        currentFile = filePath;
-        unsavedChanges = false;
-        updateTitle();
-        return true;
-    } else {
-        QMessageBox::critical(this, "Error", "Could not save file: " + file.errorString());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Error"), tr("Cannot save file: ") + file.errorString());
         return false;
     }
+
+    QString content = editor->toPlainText();
+    QTextStream out(&file);
+    out << content;
+    file.close();
+    
+    // Update current file path and state
+    currentFile = filePath;
+    unsavedChanges = false;  // Reset unsaved changes flag
+    
+    // Update UI and language settings
+    updateTitle();
+    updateSyntaxHighlighting();
+    
+    qDebug() << "Save completed, unsavedChanges:" << unsavedChanges;  // Debug output
+    return true;
 }
 
 void EditorWindow::openFile() {
@@ -451,6 +500,30 @@ void EditorWindow::updateZoom(int delta) {
 }
 
 bool EditorWindow::eventFilter(QObject* obj, QEvent* event) {
+    if (obj == editor) {
+        if (event->type() == QEvent::KeyPress) {
+            QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
+            
+            // Handle indentation if we're not showing splash screen
+            if (!showingSplash && indentManager->handleKeyPress(keyEvent)) {
+                return true;
+            }
+            
+            // Handle splash screen key events
+            if (showingSplash) {
+                if (!keyEvent->text().isEmpty() && 
+                    !(keyEvent->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))) {
+                    hideSplashScreen();
+                    
+                    if (keyEvent->text()[0].isPrint()) {
+                        editor->textCursor().insertText(keyEvent->text());
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    
     if (obj == editor->viewport()) {
         if (event->type() == QEvent::Wheel) {
             QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
@@ -458,25 +531,6 @@ bool EditorWindow::eventFilter(QObject* obj, QEvent* event) {
                 const int delta = wheelEvent->angleDelta().y();
                 updateZoom(delta > 0 ? 2 : -2);
                 return true;
-            }
-        }
-    }
-    
-    // Handle keyboard events for the editor
-    if (obj == editor && showingSplash) {
-        if (event->type() == QEvent::KeyPress) {
-            QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
-            
-            // Don't clear for modifier keys or special keys
-            if (!keyEvent->text().isEmpty() && 
-                !(keyEvent->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))) {
-                hideSplashScreen();
-                
-                // If it's a printable character, send it to the editor
-                if (keyEvent->text()[0].isPrint()) {
-                    editor->textCursor().insertText(keyEvent->text());
-                    return true;
-                }
             }
         }
     }

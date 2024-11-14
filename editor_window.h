@@ -4,6 +4,7 @@
 #include <QTextEdit>
 #include <QString>
 #include "code_highlighter.h"
+#include "indent_manager.h"
 
 class EditorWindow : public QMainWindow {
     Q_OBJECT
@@ -49,4 +50,5 @@ private:
     const int zoomStep = 1;
     bool showingSplash;
     CodeHighlighter* highlighter;
+    IndentManager* indentManager;
 };
