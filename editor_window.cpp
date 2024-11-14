@@ -15,6 +15,7 @@
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
     , unsavedChanges(false)
+    , currentZoom(13)
 {
     initUI();
     setupShortcuts();
@@ -35,10 +36,13 @@ void EditorWindow::initUI() {
     editor = new QTextEdit(this);
     editor->setFrameStyle(0);  // Remove frame
     
+    // Install event filter for wheel events
+    editor->viewport()->installEventFilter(this);
+    
     // Set monospace font with fallbacks
     QFont font;
-    font.setFamilies(QStringList{"Menlo", "Monaco", "Courier New"});  // Primary choices for macOS and Windows
-    font.setFixedPitch(true);  // Ensure fixed-width characters
+    font.setFamilies(QStringList{"Menlo", "Monaco", "Courier New"});
+    font.setFixedPitch(true);
     font.setPointSize(13);
     editor->setFont(font);
     
@@ -54,6 +58,42 @@ void EditorWindow::initUI() {
 
     // Connect text changed signal
     connect(editor, &QTextEdit::textChanged, this, &EditorWindow::handleTextChanged);
+}
+
+void EditorWindow::setupShortcuts() {
+    // Save
+    auto saveShortcut = new QShortcut(QKeySequence::Save, this);
+    connect(saveShortcut, &QShortcut::activated, this, &EditorWindow::saveFile);
+
+    // Save As
+    auto saveAsShortcut = new QShortcut(QKeySequence::SaveAs, this);
+    connect(saveAsShortcut, &QShortcut::activated, this, &EditorWindow::saveFileAs);
+
+    // Open
+    auto openShortcut = new QShortcut(QKeySequence::Open, this);
+    connect(openShortcut, &QShortcut::activated, this, &EditorWindow::openFile);
+
+    // Fullscreen
+    auto fullscreenShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this);
+    connect(fullscreenShortcut, &QShortcut::activated, this, &EditorWindow::toggleFullscreen);
+
+    // Quit
+    auto quitShortcut = new QShortcut(QKeySequence::Quit, this);
+    connect(quitShortcut, &QShortcut::activated, this, &QWidget::close);
+
+    // Zoom shortcuts
+    auto zoomInShortcut = new QShortcut(QKeySequence(tr("Ctrl+=")), this);
+    connect(zoomInShortcut, &QShortcut::activated, this, &EditorWindow::zoomIn);
+    
+    // Alternative shortcut for plus key
+    auto zoomInShortcut2 = new QShortcut(QKeySequence(tr("Ctrl++")), this);
+    connect(zoomInShortcut2, &QShortcut::activated, this, &EditorWindow::zoomIn);
+
+    auto zoomOutShortcut = new QShortcut(QKeySequence(tr("Ctrl+-")), this);
+    connect(zoomOutShortcut, &QShortcut::activated, this, &EditorWindow::zoomOut);
+
+    auto resetZoomShortcut = new QShortcut(QKeySequence(tr("Ctrl+0")), this);
+    connect(resetZoomShortcut, &QShortcut::activated, this, &EditorWindow::resetZoom);
 }
 
 void EditorWindow::updateTheme() {
@@ -110,28 +150,6 @@ void EditorWindow::updateTheme() {
     palette.setColor(QPalette::Base, QColor(backgroundColor));
     palette.setColor(QPalette::Text, QColor(textColor));
     QApplication::setPalette(palette);
-}
-
-void EditorWindow::setupShortcuts() {
-    // Save
-    auto saveShortcut = new QShortcut(QKeySequence::Save, this);
-    connect(saveShortcut, &QShortcut::activated, this, &EditorWindow::saveFile);
-
-    // Save As
-    auto saveAsShortcut = new QShortcut(QKeySequence::SaveAs, this);
-    connect(saveAsShortcut, &QShortcut::activated, this, &EditorWindow::saveFileAs);
-
-    // Open
-    auto openShortcut = new QShortcut(QKeySequence::Open, this);
-    connect(openShortcut, &QShortcut::activated, this, &EditorWindow::openFile);
-
-    // Fullscreen
-    auto fullscreenShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this);
-    connect(fullscreenShortcut, &QShortcut::activated, this, &EditorWindow::toggleFullscreen);
-
-    // Quit
-    auto quitShortcut = new QShortcut(QKeySequence::Quit, this);
-    connect(quitShortcut, &QShortcut::activated, this, &QWidget::close);
 }
 
 void EditorWindow::handleTextChanged() {
@@ -244,6 +262,43 @@ void EditorWindow::toggleFullscreen() {
     } else {
         showFullScreen();
     }
+}
+
+void EditorWindow::zoomIn() {
+    updateZoom(2);
+}
+
+void EditorWindow::zoomOut() {
+    updateZoom(-2);
+}
+
+void EditorWindow::resetZoom() {
+    currentZoom = 13;
+    QFont font = editor->font();
+    font.setPointSize(currentZoom);
+    editor->setFont(font);
+}
+
+void EditorWindow::updateZoom(int delta) {
+    int newSize = currentZoom + delta;
+    if (newSize >= 8 && newSize <= 24) {
+        currentZoom = newSize;
+        QFont font = editor->font();
+        font.setPointSize(currentZoom);
+        editor->setFont(font);
+    }
+}
+
+bool EditorWindow::eventFilter(QObject* obj, QEvent* event) {
+    if (obj == editor->viewport() && event->type() == QEvent::Wheel) {
+        QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
+        if (wheelEvent->modifiers() & Qt::ControlModifier) {
+            const int delta = wheelEvent->angleDelta().y();
+            updateZoom(delta > 0 ? 2 : -2);
+            return true;
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
 }
 
 void EditorWindow::closeEvent(QCloseEvent* event) {
