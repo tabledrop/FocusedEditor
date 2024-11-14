@@ -8,6 +8,9 @@
 #include <QTextStream>
 #include <QFileInfo>
 #include <QCloseEvent>
+#include <QPalette>
+#include <QStyleHints>
+#include <QApplication>
 
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -15,6 +18,10 @@ EditorWindow::EditorWindow(QWidget* parent)
 {
     initUI();
     setupShortcuts();
+    
+    // Connect to system theme changes
+    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged,
+            this, &EditorWindow::updateTheme);
 }
 
 void EditorWindow::initUI() {
@@ -35,27 +42,8 @@ void EditorWindow::initUI() {
     font.setPointSize(13);
     editor->setFont(font);
     
-    // Set stylesheet with monospace font fallback chain
-    editor->setStyleSheet(R"(
-        QTextEdit {
-            background-color: #FFFFFF;
-            border: none;
-            color: #000000;
-            font-family: Menlo, Monaco, "Courier New", monospace;
-        }
-        QScrollBar {
-            width: 8px;
-            background: transparent;
-        }
-        QScrollBar::handle {
-            background: #CCCCCC;
-            border-radius: 4px;
-        }
-        QScrollBar::add-line, QScrollBar::sub-line,
-        QScrollBar::add-page, QScrollBar::sub-page {
-            background: none;
-        }
-    )");
+    // Initial theme setup
+    updateTheme();
 
     // Add editor to layout
     layout->addWidget(editor);
@@ -66,6 +54,62 @@ void EditorWindow::initUI() {
 
     // Connect text changed signal
     connect(editor, &QTextEdit::textChanged, this, &EditorWindow::handleTextChanged);
+}
+
+void EditorWindow::updateTheme() {
+    bool isDarkMode = QApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+    
+    QString backgroundColor = isDarkMode ? "#1E1E1E" : "#FFFFFF";
+    QString textColor = isDarkMode ? "#D4D4D4" : "#000000";
+    QString scrollbarBg = isDarkMode ? "#2D2D2D" : "#F0F0F0";
+    QString scrollbarHandle = isDarkMode ? "#4A4A4A" : "#CCCCCC";
+    
+    editor->setStyleSheet(QString(R"(
+        QTextEdit {
+            background-color: %1;
+            border: none;
+            color: %2;
+            font-family: Menlo, Monaco, "Courier New", monospace;
+        }
+        QScrollBar:vertical {
+            width: 8px;
+            background: %3;
+        }
+        QScrollBar::handle:vertical {
+            background: %4;
+            border-radius: 4px;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            background: none;
+            border: none;
+        }
+        QScrollBar:horizontal {
+            height: 8px;
+            background: %3;
+        }
+        QScrollBar::handle:horizontal {
+            background: %4;
+            border-radius: 4px;
+        }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal,
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+            background: none;
+            border: none;
+        }
+    )")
+    .arg(backgroundColor)
+    .arg(textColor)
+    .arg(scrollbarBg)
+    .arg(scrollbarHandle));
+    
+    // Update the application-wide palette for consistent theming
+    QPalette palette = QApplication::palette();
+    palette.setColor(QPalette::Window, QColor(backgroundColor));
+    palette.setColor(QPalette::WindowText, QColor(textColor));
+    palette.setColor(QPalette::Base, QColor(backgroundColor));
+    palette.setColor(QPalette::Text, QColor(textColor));
+    QApplication::setPalette(palette);
 }
 
 void EditorWindow::setupShortcuts() {

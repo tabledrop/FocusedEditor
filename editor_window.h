@@ -19,6 +19,7 @@ private slots:
     void saveFileAs();
     void openFile();
     void toggleFullscreen();
+    void updateTheme();
 
 private:
     void initUI();
