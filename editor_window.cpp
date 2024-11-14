@@ -14,31 +14,25 @@
 #include <QApplication>
 #include <QTextBlock>
 #include <QScrollBar>
+#include <QSettings>
 
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
     , unsavedChanges(false)
     , currentZoom(13)  // Initialize directly instead of using defaultFontSize
-    , showingSplash(true)
+    , showingSplash(false)
 {
-    initUI();
-    setupShortcuts();
+    setMinimumSize(400, 300);
     
-    // Connect to system theme changes
-    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged,
-            this, &EditorWindow::updateTheme);
-    
-    showSplashScreen();
-}
-
-void EditorWindow::initUI() {
     // Create central widget and layout
-    auto centralWidget = new QWidget(this);
-    setCentralWidget(centralWidget);
-    auto layout = new QVBoxLayout(centralWidget);
-    layout->setContentsMargins(20, 20, 20, 20);
-
-    // Create and configure text editor
+    QWidget* central = new QWidget(this);
+    setCentralWidget(central);
+    
+    QVBoxLayout* layout = new QVBoxLayout(central);
+    layout->setContentsMargins(11, 11, 11, 11);  
+    layout->setSpacing(0);
+    
+    // Create and configure editor
     editor = new QTextEdit(this);
     editor->setFrameStyle(0);  // Remove frame
     
@@ -46,20 +40,25 @@ void EditorWindow::initUI() {
     editor->viewport()->installEventFilter(this);
     editor->installEventFilter(this);  // Add event filter to the editor itself
     
-    // Set monospace font with fallbacks
-    QFont font;
-    font.setFamilies(QStringList{"SF Mono", "Menlo", "Monaco", "Courier New"});
-    font.setFixedPitch(true);
-    font.setStyleHint(QFont::Monospace);  // Ensure system will choose a monospace font if others fail
-    font.setPointSize(currentZoom);
-    editor->setFont(font);
-    
-    // Initial theme setup
+    // Initial theme setup (this will also set the font from settings)
     updateTheme();
-
+    
     // Add editor to layout
     layout->addWidget(editor);
+    
+    // Initialize UI elements
+    initUI();
+    setupShortcuts();
+    
+    // Show splash screen
+    showSplashScreen();
+    
+    // Connect to system theme changes
+    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged,
+            this, &EditorWindow::updateTheme);
+}
 
+void EditorWindow::initUI() {
     // Set window properties
     setWindowTitle("Focused Editor");
     resize(800, 600);
@@ -167,6 +166,11 @@ void EditorWindow::showPreferences() {
     if (dialog.exec() == QDialog::Accepted) {
         QFont newFont = dialog.getSelectedFont();
         
+        // Save font settings before recreating editor
+        QSettings settings("Focused Editor", "Editor");
+        settings.setValue("font/family", newFont.family());
+        settings.setValue("font/size", newFont.pointSize());
+        
         // Save current state
         QString content = editor->toPlainText();
         int scrollValue = editor->verticalScrollBar()->value();
@@ -212,6 +216,9 @@ void EditorWindow::showPreferences() {
         QTextCursor cursor = editor->textCursor();
         cursor.movePosition(QTextCursor::End);
         editor->setTextCursor(cursor);
+        
+        // Update theme to ensure proper styling
+        updateTheme();
     }
 }
 
@@ -223,12 +230,26 @@ void EditorWindow::updateTheme() {
     QString scrollbarBg = isDarkMode ? "#2D2D2D" : "#F0F0F0";
     QString scrollbarHandle = isDarkMode ? "#4A4A4A" : "#CCCCCC";
     
+    // Load saved font settings
+    QSettings settings("Focused Editor", "Editor");
+    QString fontFamily = settings.value("font/family", "Menlo").toString();
+    int fontSize = settings.value("font/size", defaultFontSize).toInt();
+    
+    QFont font(fontFamily, fontSize);
+    font.setStyleHint(QFont::Monospace);
+    font.setFixedPitch(true);
+    
+    // Apply font to editor
+    editor->setFont(font);
+    editor->document()->setDefaultFont(font);
+    currentZoom = fontSize;
+    
     editor->setStyleSheet(QString(R"(
         QTextEdit {
             background-color: %1;
             border: none;
             color: %2;
-            font-family: Menlo, Monaco, "Courier New", monospace;
+            padding: 20px;
         }
         QScrollBar:vertical {
             width: 8px;
