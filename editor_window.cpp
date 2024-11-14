@@ -13,7 +13,6 @@
 #include <QStyleHints>
 #include <QApplication>
 #include <QTextBlock>
-#include <QDebug>
 #include <QScrollBar>
 
 EditorWindow::EditorWindow(QWidget* parent)
@@ -167,8 +166,6 @@ void EditorWindow::showPreferences() {
     
     if (dialog.exec() == QDialog::Accepted) {
         QFont newFont = dialog.getSelectedFont();
-        qDebug() << "Current font:" << editor->font().family() << editor->font().pointSize();
-        qDebug() << "New font:" << newFont.family() << newFont.pointSize();
         
         // Save current state
         QString content = editor->toPlainText();
@@ -207,10 +204,6 @@ void EditorWindow::showPreferences() {
         
         currentZoom = newFont.pointSize();
         showingSplash = wasShowingSplash;
-        
-        qDebug() << "After setting - Font:" << editor->font().family() << editor->font().pointSize();
-        qDebug() << "Editor read-only:" << editor->isReadOnly();
-        qDebug() << "Showing splash:" << showingSplash;
         
         // Ensure editor is properly focused
         editor->setFocus();
