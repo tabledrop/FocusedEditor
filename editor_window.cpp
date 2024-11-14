@@ -368,21 +368,21 @@ void EditorWindow::updateSyntaxHighlighting() {
     if (!currentFile.isEmpty()) {
         QString extension = QFileInfo(currentFile).suffix().toLower();
         CodeHighlighter::Language hlLang = CodeHighlighter::None;
-        IndentManager::Language indentLang = IndentManager::None;
+        IndentManager::Language indentLang = IndentManager::Language::None;
         
         if (extension == "cpp" || extension == "h" || extension == "hpp" || extension == "c" || extension == "cc") {
             hlLang = CodeHighlighter::CPP;
-            indentLang = IndentManager::CPP;
+            indentLang = IndentManager::Language::CPP;
         } else if (extension == "py") {
             hlLang = CodeHighlighter::Python;
-            indentLang = IndentManager::Python;
+            indentLang = IndentManager::Language::Python;
         }
         
         highlighter->setLanguage(hlLang);
         indentManager->setLanguage(indentLang);
     } else {
         highlighter->setLanguage(CodeHighlighter::None);
-        indentManager->setLanguage(IndentManager::None);
+        indentManager->setLanguage(IndentManager::Language::None);
     }
 }
 
@@ -547,21 +547,19 @@ bool EditorWindow::eventFilter(QObject* obj, QEvent* event) {
         if (event->type() == QEvent::KeyPress) {
             QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
             
-            // Handle indentation if we're not showing splash screen
-            if (!showingSplash && indentManager->handleKeyPress(keyEvent)) {
-                return true;
-            }
-            
-            // Handle splash screen key events
+            // Handle key events in splash screen
             if (showingSplash) {
+                if (keyEvent->key() == Qt::Key_Return || 
+                    keyEvent->key() == Qt::Key_Enter ||
+                    keyEvent->key() == Qt::Key_Tab) {
+                    return true;  // Ignore these keys in splash screen
+                }
+                
+                // Any other key press starts a new file
                 if (!keyEvent->text().isEmpty() && 
-                    !(keyEvent->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))) {
+                    keyEvent->key() != Qt::Key_Escape && 
+                    keyEvent->key() != Qt::Key_Backspace) {
                     hideSplashScreen();
-                    
-                    if (keyEvent->text()[0].isPrint()) {
-                        editor->textCursor().insertText(keyEvent->text());
-                        return true;
-                    }
                 }
             }
         }

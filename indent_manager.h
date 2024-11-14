@@ -2,54 +2,34 @@
 
 #include <QObject>
 #include <QTextEdit>
-#include <QString>
 #include <QKeyEvent>
-#include <QMap>
+#include "custom_editor.h"
 
 class IndentManager : public QObject {
     Q_OBJECT
 
 public:
-    enum Language {
+    enum class Language {
         None,
         CPP,
         Python
     };
 
-    explicit IndentManager(QTextEdit* editor, QObject* parent = nullptr);
+    explicit IndentManager(CustomEditor* editor, QObject* parent = nullptr);
     void setLanguage(Language lang);
-    bool handleKeyPress(QKeyEvent* event);
+
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
-    bool handleTab();
-    bool handleEnter();
-    bool handleBackspace();
-    bool handleCharacter(QKeyEvent* event);
-    QString getCurrentLineIndentation();
+    void handleKeyPress(QKeyEvent* event);
+    void handleReturn();
+    void handleTab();
+    void handleBackspace();
+    QString getCurrentIndentation();
+    int getIndentationWidth();
     bool shouldIncreaseIndent();
-    bool shouldDecreaseIndent();
-    int getIndentLevel(const QString& line);
-    QString getIndentString() const;
-    void insertMatchingPair(const QString& opening, const QString& closing);
-    void formatBlock(const QString& opening);
-    bool isLanguageMode() const { return currentLanguage != None; }
 
-    QTextEdit* editor;
-    Language currentLanguage;
-    const int spacesPerTab = 4;
-    const QString cppBlockStart = "{";
-    const QString cppBlockEnd = "}";
-    const QStringList pythonBlockStarters = {
-        "if", "for", "while", "def", "class", "with",
-        "try", "except", "finally", "elif", "else"
-    };
-
-    // Auto-pair mappings
-    const QMap<QString, QString> autoPairs = {
-        {"{", "}"},
-        {"(", ")"},
-        {"[", "]"},
-        {"\"", "\""},
-        {"'", "'"}
-    };
+    CustomEditor* editor;
+    Language language;
 };

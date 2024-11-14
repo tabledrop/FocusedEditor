@@ -18,6 +18,6 @@ protected:
 private:
     CustomEditor* editor;
     bool visible;
-    const int horizontalPadding = 5;  // Padding between numbers and text
-    const int minWidth = 30;  // Minimum width of the line number area
+    const int horizontalPadding = 5;
+    const int minWidth = 30;
 };
