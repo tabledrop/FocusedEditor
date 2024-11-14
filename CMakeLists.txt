@@ -18,6 +18,8 @@ add_executable(focused_editor
     preferences_dialog.h
     code_highlighter.cpp
     code_highlighter.h
+    indent_manager.cpp
+    indent_manager.h
 )
 
 target_link_libraries(focused_editor PRIVATE Qt6::Widgets)
