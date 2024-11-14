@@ -15,6 +15,7 @@
 #include <QTextBlock>
 #include <QScrollBar>
 #include <QSettings>
+#include "code_highlighter.h"
 
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -35,6 +36,9 @@ EditorWindow::EditorWindow(QWidget* parent)
     // Create and configure editor
     editor = new QTextEdit(this);
     editor->setFrameStyle(0);  // Remove frame
+    
+    // Create syntax highlighter
+    highlighter = new CodeHighlighter(editor->document());
     
     // Install event filters
     editor->viewport()->installEventFilter(this);
@@ -73,6 +77,7 @@ void EditorWindow::showSplashScreen() {
     editor->clear();
     editor->setReadOnly(true);
     showingSplash = true;
+    unsavedChanges = false;  // Don't prompt to save splash screen
     
     QTextCursor cursor = editor->textCursor();
     QTextBlockFormat blockFormat;
@@ -80,7 +85,6 @@ void EditorWindow::showSplashScreen() {
     
     cursor.movePosition(QTextCursor::Start);
     
-    // Insert each line with proper centering
     cursor.insertBlock(blockFormat);
     cursor.insertText("Welcome to Focused Editor");
     
@@ -108,9 +112,10 @@ void EditorWindow::showSplashScreen() {
 void EditorWindow::hideSplashScreen() {
     if (!showingSplash) return;
     
+    showingSplash = false;
     editor->clear();
     editor->setReadOnly(false);
-    showingSplash = false;
+    unsavedChanges = false;  // Reset changes flag when hiding splash
 }
 
 void EditorWindow::handleTextChanged() {
@@ -222,6 +227,51 @@ void EditorWindow::showPreferences() {
     }
 }
 
+void EditorWindow::updateSyntaxHighlighting() {
+    if (!currentFile.isEmpty()) {
+        QString extension = QFileInfo(currentFile).suffix().toLower();
+        if (extension == "cpp" || extension == "h" || extension == "hpp" || extension == "c" || extension == "cc") {
+            highlighter->setLanguage(CodeHighlighter::CPP);
+        } else if (extension == "py") {
+            highlighter->setLanguage(CodeHighlighter::Python);
+        } else {
+            highlighter->setLanguage(CodeHighlighter::None);
+        }
+    } else {
+        highlighter->setLanguage(CodeHighlighter::None);
+    }
+}
+
+bool EditorWindow::loadFile(const QString& filePath) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Error", "Cannot open file: " + file.errorString());
+        return false;
+    }
+
+    QTextStream in(&file);
+    QString content = in.readAll();
+    
+    // First hide splash screen (this clears readonly flag)
+    hideSplashScreen();
+    
+    // Then set content and update state
+    editor->setPlainText(content);
+    currentFile = filePath;
+    unsavedChanges = false;
+    
+    // Make sure editor is editable and has focus
+    editor->setReadOnly(false);
+    editor->moveCursor(QTextCursor::Start);
+    editor->setFocus();
+    
+    // Update UI
+    updateTitle();
+    updateSyntaxHighlighting();
+    
+    return true;
+}
+
 void EditorWindow::updateTheme() {
     bool isDarkMode = QApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
     
@@ -290,6 +340,9 @@ void EditorWindow::updateTheme() {
     palette.setColor(QPalette::Base, QColor(backgroundColor));
     palette.setColor(QPalette::Text, QColor(textColor));
     QApplication::setPalette(palette);
+    
+    // Update syntax highlighter theme
+    highlighter->updateTheme(isDarkMode);
 }
 
 void EditorWindow::updateTitle() {
@@ -313,12 +366,7 @@ void EditorWindow::saveFile() {
 }
 
 void EditorWindow::saveFileAs() {
-    QString filePath = QFileDialog::getSaveFileName(
-        this,
-        "Save File",
-        QString(),
-        "Text Files (*.txt);;All Files (*)");
-    
+    QString filePath = QFileDialog::getSaveFileName(this);
     if (!filePath.isEmpty()) {
         saveToFile(filePath);
     }
@@ -340,31 +388,11 @@ bool EditorWindow::saveToFile(const QString& filePath) {
 }
 
 void EditorWindow::openFile() {
-    if (maybeSave()) {
-        QString filePath = QFileDialog::getOpenFileName(
-            this,
-            "Open File",
-            QString(),
-            "Text Files (*.txt);;All Files (*)");
-        
+    if (maybeSave()) {  // Only check for save if there are actual changes
+        QString filePath = QFileDialog::getOpenFileName(this);
         if (!filePath.isEmpty()) {
             loadFile(filePath);
         }
-    }
-}
-
-bool EditorWindow::loadFile(const QString& filePath) {
-    QFile file(filePath);
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QTextStream stream(&file);
-        editor->setPlainText(stream.readAll());
-        currentFile = filePath;
-        unsavedChanges = false;
-        updateTitle();
-        return true;
-    } else {
-        QMessageBox::critical(this, "Error", "Could not open file: " + file.errorString());
-        return false;
     }
 }
 
@@ -447,8 +475,8 @@ bool EditorWindow::eventFilter(QObject* obj, QEvent* event) {
                 // If it's a printable character, send it to the editor
                 if (keyEvent->text()[0].isPrint()) {
                     editor->textCursor().insertText(keyEvent->text());
+                    return true;
                 }
-                return true;
             }
         }
     }

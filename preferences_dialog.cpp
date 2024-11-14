@@ -70,6 +70,7 @@ void PreferencesDialog::previewFont()
 
 QFont PreferencesDialog::getSelectedFont() const
 {
+    /* sample comment */
     QFont font = fontComboBox->currentFont();
     font.setPointSize(fontSizeSpinner->value());
     font.setStyleHint(QFont::Monospace);
