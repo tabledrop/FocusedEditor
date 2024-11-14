@@ -98,7 +98,10 @@ void EditorWindow::showSplashScreen() {
     cursor.insertText("Press Cmd+O to open a file");
     
     cursor.insertBlock(blockFormat);
-    cursor.insertText("- or -");
+    cursor.insertText("Press Cmd+, to open the preferences dialog");
+
+    cursor.insertBlock(blockFormat);
+    cursor.insertText("-- or --"); 
     
     cursor.insertBlock(blockFormat);
     cursor.insertText("Start typing to create a new file");
