@@ -11,6 +11,8 @@ A minimalist, distraction-free text editor built with Qt6 and C++. This editor i
 - Subtle scrollbars that appear only when needed
 - File change tracking with unsaved changes indicator
 - Native macOS look and feel
+- System theme support (light/dark mode)
+- Text zoom functionality
 
 ## Requirements
 
@@ -50,6 +52,11 @@ The editor is designed to be keyboard-driven for minimal disruption to your writ
 | ⌘ + O | Open file |
 | ⌃ + ⇧ + F | Toggle full-screen mode |
 | ⌘ + Q | Quit |
+| ⌘ + = or ⌘ + + | Zoom in |
+| ⌘ + - | Zoom out |
+| ⌘ + 0 | Reset zoom |
+
+You can also use ⌘ + Mouse Wheel to zoom in and out.
 
 ## Design Philosophy
 
