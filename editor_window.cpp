@@ -18,6 +18,8 @@
 #include <QSettings>
 #include "code_highlighter.h"
 #include "indent_manager.h"
+#include "line_number_area.h"
+#include "custom_editor.h"
 
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -36,16 +38,20 @@ EditorWindow::EditorWindow(QWidget* parent)
     layout->setSpacing(0);
     
     // Create and configure editor
-    editor = new QTextEdit(this);
+    editor = new CustomEditor(this);
     editor->setFrameStyle(0);  // Remove frame
     
     // Create syntax highlighter and indent manager
     highlighter = new CodeHighlighter(editor->document());
     indentManager = new IndentManager(editor, this);
     
+    // Create line number area (initially hidden)
+    lineNumberArea = new LineNumberArea(editor);
+    lineNumberArea->setVisible(false);
+    
     // Install event filters
     editor->viewport()->installEventFilter(this);
-    editor->installEventFilter(this);  // Add event filter to the editor itself
+    editor->installEventFilter(this);
     
     // Initial theme setup (this will also set the font from settings)
     updateTheme();
@@ -63,82 +69,16 @@ EditorWindow::EditorWindow(QWidget* parent)
     // Connect to system theme changes
     connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged,
             this, &EditorWindow::updateTheme);
-}
-
-void EditorWindow::initUI() {
-    // Set window properties
-    setWindowTitle("Focused Editor");
-    resize(800, 600);
-
-    // Connect text changed signal
-    connect(editor, &QTextEdit::textChanged, this, &EditorWindow::handleTextChanged);
-}
-
-void EditorWindow::showSplashScreen() {
-    if (!currentFile.isEmpty()) return;
-    
-    editor->clear();
-    editor->setReadOnly(true);
-    showingSplash = true;
-    unsavedChanges = false;  // Don't prompt to save splash screen
-    
-    QTextCursor cursor = editor->textCursor();
-    QTextBlockFormat blockFormat;
-    blockFormat.setAlignment(Qt::AlignCenter);
-    
-    cursor.movePosition(QTextCursor::Start);
-    
-    cursor.insertBlock(blockFormat);
-    cursor.insertText("Welcome to Focused Editor");
-    
-    cursor.insertBlock(blockFormat);
-    cursor.insertText("\n");
-    
-    cursor.insertBlock(blockFormat);
-    cursor.insertText("A minimalist text editor for distraction-free coding.");
-    
-    cursor.insertBlock(blockFormat);
-    cursor.insertText("\n");
-    
-    cursor.insertBlock(blockFormat);
-    cursor.insertText("Press Cmd+O to open a file");
-    
-    cursor.insertBlock(blockFormat);
-    cursor.insertText("- or -");
-    
-    cursor.insertBlock(blockFormat);
-    cursor.insertText("Start typing to create a new file");
-    
-    editor->setTextCursor(cursor);
-}
-
-void EditorWindow::hideSplashScreen() {
-    if (!showingSplash) return;
-    
-    showingSplash = false;
-    editor->clear();
-    editor->setReadOnly(false);
-    unsavedChanges = false;  // Reset changes flag when hiding splash
-}
-
-void EditorWindow::handleTextChanged() {
-    if (!showingSplash) {  // Only mark changes when not showing splash screen
-        // Mark as unsaved only if the content actually changed
-        QString currentText = editor->toPlainText();
-        if (!currentFile.isEmpty()) {
-            QFile file(currentFile);
-            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                QString savedText = QTextStream(&file).readAll();
-                unsavedChanges = (currentText != savedText);
-                updateTitle();
-                file.close();
-            }
-        } else {
-            // For new files, mark as unsaved if there's any content
-            unsavedChanges = !currentText.isEmpty();
-            updateTitle();
-        }
-    }
+            
+    // Connect editor signals
+    connect(editor->document(), &QTextDocument::contentsChange,
+            this, &EditorWindow::handleTextChanged);
+            
+    connect(editor, &QPlainTextEdit::updateRequest,
+            this, &EditorWindow::updateLineNumberArea);
+            
+    connect(editor->document(), &QTextDocument::blockCountChanged,
+            this, &EditorWindow::updateLineNumberAreaWidth);
 }
 
 void EditorWindow::setupShortcuts() {
@@ -146,7 +86,7 @@ void EditorWindow::setupShortcuts() {
     QAction* saveAction = new QAction(this);
     saveAction->setShortcut(QKeySequence::Save);
     connect(saveAction, &QAction::triggered, this, &EditorWindow::saveFile);
-    addAction(saveAction);  // This is crucial for the shortcut to work
+    addAction(saveAction);
     
     QAction* openAction = new QAction(this);
     openAction->setShortcut(QKeySequence::Open);
@@ -180,123 +120,22 @@ void EditorWindow::setupShortcuts() {
     connect(resetZoomAction, &QAction::triggered, this, &EditorWindow::resetZoom);
     addAction(resetZoomAction);
     
-    // Debug: Print available shortcuts
-    qDebug() << "Save shortcut:" << QKeySequence::Save;
-    qDebug() << "Open shortcut:" << QKeySequence::Open;
+    // Line numbers
+    QAction* lineNumbersAction = new QAction(this);
+    lineNumbersAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    connect(lineNumbersAction, &QAction::triggered, this, &EditorWindow::toggleLineNumbers);
+    addAction(lineNumbersAction);
 }
 
-void EditorWindow::showPreferences() {
-    PreferencesDialog dialog(editor->font(), this);
-    
-    if (dialog.exec() == QDialog::Accepted) {
-        QFont newFont = dialog.getSelectedFont();
-        
-        // Save font settings before recreating editor
-        QSettings settings("Focused Editor", "Editor");
-        settings.setValue("font/family", newFont.family());
-        settings.setValue("font/size", newFont.pointSize());
-        
-        // Save current state
-        QString content = editor->toPlainText();
-        int scrollValue = editor->verticalScrollBar()->value();
-        bool wasReadOnly = editor->isReadOnly();
-        bool wasShowingSplash = showingSplash;
-        
-        // Remove event filters and disconnect signals from old editor
-        editor->viewport()->removeEventFilter(this);
-        editor->removeEventFilter(this);
-        disconnect(editor, &QTextEdit::textChanged, this, &EditorWindow::handleTextChanged);
-        
-        // Create new editor with desired font
-        QTextEdit* newEditor = new QTextEdit(this);
-        newEditor->setFrameStyle(0);
-        newEditor->setFont(newFont);
-        newEditor->document()->setDefaultFont(newFont);
-        newEditor->setPlainText(content);
-        
-        // Copy settings from old editor
-        newEditor->verticalScrollBar()->setValue(scrollValue);
-        newEditor->setReadOnly(wasReadOnly);
-        
-        // Replace old editor in layout
-        QLayout* layout = centralWidget()->layout();
-        layout->replaceWidget(editor, newEditor);
-        
-        // Clean up old editor
-        editor->deleteLater();
-        editor = newEditor;
-        
-        // Set up event filters and signals for new editor
-        editor->viewport()->installEventFilter(this);
-        editor->installEventFilter(this);
-        connect(editor, &QTextEdit::textChanged, this, &EditorWindow::handleTextChanged);
-        
-        currentZoom = newFont.pointSize();
-        showingSplash = wasShowingSplash;
-        
-        // Ensure editor is properly focused
-        editor->setFocus();
-        
-        // Move cursor to end
-        QTextCursor cursor = editor->textCursor();
-        cursor.movePosition(QTextCursor::End);
-        editor->setTextCursor(cursor);
-        
-        // Update theme to ensure proper styling
-        updateTheme();
-    }
-}
-
-void EditorWindow::updateSyntaxHighlighting() {
-    if (!currentFile.isEmpty()) {
-        QString extension = QFileInfo(currentFile).suffix().toLower();
-        CodeHighlighter::Language hlLang = CodeHighlighter::None;
-        IndentManager::Language indentLang = IndentManager::None;
-        
-        if (extension == "cpp" || extension == "h" || extension == "hpp" || extension == "c" || extension == "cc") {
-            hlLang = CodeHighlighter::CPP;
-            indentLang = IndentManager::CPP;
-        } else if (extension == "py") {
-            hlLang = CodeHighlighter::Python;
-            indentLang = IndentManager::Python;
+void EditorWindow::toggleLineNumbers() {
+    if (lineNumberArea) {
+        bool newVisible = !lineNumberArea->isVisible();
+        lineNumberArea->setVisible(newVisible);
+        updateLineNumberAreaWidth();
+        if (newVisible) {
+            lineNumberArea->update();
         }
-        
-        highlighter->setLanguage(hlLang);
-        indentManager->setLanguage(indentLang);
-    } else {
-        highlighter->setLanguage(CodeHighlighter::None);
-        indentManager->setLanguage(IndentManager::None);
     }
-}
-
-bool EditorWindow::loadFile(const QString& filePath) {
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, "Error", "Cannot open file: " + file.errorString());
-        return false;
-    }
-
-    QTextStream in(&file);
-    QString content = in.readAll();
-    
-    // First hide splash screen (this clears readonly flag)
-    hideSplashScreen();
-    
-    // Then set content and update state
-    editor->setPlainText(content);
-    currentFile = filePath;
-    unsavedChanges = false;
-    
-    // Make sure editor is editable and has focus
-    editor->setReadOnly(false);
-    editor->moveCursor(QTextCursor::Start);
-    editor->setFocus();
-    
-    // Update UI
-    updateTitle();
-    updateSyntaxHighlighting();
-    
-    return true;
 }
 
 void EditorWindow::updateTheme() {
@@ -322,7 +161,7 @@ void EditorWindow::updateTheme() {
     currentZoom = fontSize;
     
     editor->setStyleSheet(QString(R"(
-        QTextEdit {
+        QPlainTextEdit {
             background-color: %1;
             border: none;
             color: %2;
@@ -360,6 +199,16 @@ void EditorWindow::updateTheme() {
     .arg(scrollbarBg)
     .arg(scrollbarHandle));
     
+    // Update line number area style
+    if (lineNumberArea) {
+        lineNumberArea->setStyleSheet(QString(R"(
+            QWidget {
+                background-color: %1;
+                padding-top: 20px;
+            }
+        )").arg(isDarkMode ? "#1E1E1E" : "#F0F0F0"));
+    }
+    
     // Update the application-wide palette for consistent theming
     QPalette palette = QApplication::palette();
     palette.setColor(QPalette::Window, QColor(backgroundColor));
@@ -372,29 +221,181 @@ void EditorWindow::updateTheme() {
     highlighter->updateTheme(isDarkMode);
 }
 
-void EditorWindow::updateTitle() {
-    QString title = "Focused Editor";
-    
-    if (!currentFile.isEmpty()) {
-        QFileInfo fileInfo(currentFile);
-        title = fileInfo.fileName() + " - " + title;
-    }
-    
-    if (unsavedChanges) {
-        title = "*" + title;
-    }
-    
-    setWindowTitle(title);
+void EditorWindow::initUI() {
+    // Set window properties
+    setWindowTitle("Focused Editor");
+    resize(800, 600);
+
+    // Connect signals
+    connect(editor->document(), &QTextDocument::contentsChange,
+            this, &EditorWindow::handleTextChanged);
+            
+    connect(editor, &QPlainTextEdit::updateRequest,
+            this, &EditorWindow::updateLineNumberArea);
+            
+    connect(editor->document(), &QTextDocument::blockCountChanged,
+            this, &EditorWindow::updateLineNumberAreaWidth);
 }
 
-void EditorWindow::saveFile() {
+void EditorWindow::updateLineNumberAreaWidth() {
+    if (lineNumberArea && lineNumberArea->isVisible()) {
+        int width = lineNumberArea->sizeHint().width();
+        
+        // Set viewport margins first
+        editor->setCustomViewportMargins(width, 0, 0, 0);
+        
+        // Get viewport geometry and adjust for line numbers
+        QRect rect = editor->viewport()->geometry();
+        rect.setLeft(rect.left() - width);  // Move left to create space
+        rect.setWidth(width);  // Set width for line numbers
+        lineNumberArea->setGeometry(rect);
+    } else {
+        editor->setCustomViewportMargins(0, 0, 0, 0);
+    }
+}
+
+void EditorWindow::updateLineNumberArea(const QRect& rect, int dy) {
+    if (!lineNumberArea || !lineNumberArea->isVisible()) return;
+    
+    if (dy) {
+        lineNumberArea->scroll(0, dy);
+    } else {
+        lineNumberArea->update(0, rect.y(), lineNumberArea->width(), rect.height());
+    }
+
+    if (rect.contains(editor->viewport()->rect())) {
+        updateLineNumberAreaWidth();
+    }
+}
+
+void EditorWindow::showSplashScreen() {
+    if (!currentFile.isEmpty()) return;
+    
+    editor->clear();
+    editor->setReadOnly(true);
+    showingSplash = true;
+    unsavedChanges = false;  // Don't prompt to save splash screen
+    
+    // Create centered text format
+    QTextBlockFormat centerFormat;
+    centerFormat.setAlignment(Qt::AlignHCenter);
+    
+    // Create cursor and start with empty block for top margin
+    QTextCursor cursor(editor->document());
+    
+    // Add top margin (about 30% of editor height)
+    QTextBlockFormat topMarginFormat = centerFormat;
+    topMarginFormat.setTopMargin(editor->height() * 0.3);
+    cursor.setBlockFormat(topMarginFormat);
+    
+    // Welcome text
+    cursor.insertText("Welcome to Focused Editor");
+    cursor.insertBlock(centerFormat);
+    cursor.insertText("\n");
+    cursor.insertBlock(centerFormat);
+    
+    // Description
+    cursor.insertText("A minimalist text editor for distraction-free coding.");
+    cursor.insertBlock(centerFormat);
+    cursor.insertText("\n");
+    cursor.insertBlock(centerFormat);
+    
+    // Instructions
+    cursor.insertText("Press Cmd+O to open a file");
+    cursor.insertBlock(centerFormat);
+    cursor.insertText("- or -");
+    cursor.insertBlock(centerFormat);
+    cursor.insertText("Start typing to create a new file");
+    
+    // Hide line numbers for splash screen
+    if (lineNumberArea) {
+        lineNumberArea->setVisible(false);
+    }
+    
+    // Move cursor to start to avoid selection
+    cursor.movePosition(QTextCursor::Start);
+    editor->setTextCursor(cursor);
+    
+    // Force center alignment for the entire document
+    QTextDocument* doc = editor->document();
+    QTextOption opt = doc->defaultTextOption();
+    opt.setAlignment(Qt::AlignHCenter);
+    doc->setDefaultTextOption(opt);
+}
+
+void EditorWindow::hideSplashScreen() {
+    if (!showingSplash) return;
+    
+    showingSplash = false;
+    editor->clear();
+    editor->setReadOnly(false);
+    unsavedChanges = false;  // Reset changes flag when hiding splash
+    
+    // Reset text alignment to left
+    QTextDocument* doc = editor->document();
+    QTextOption opt = doc->defaultTextOption();
+    opt.setAlignment(Qt::AlignLeft);
+    doc->setDefaultTextOption(opt);
+    
+    // Show line numbers when exiting splash screen
+    if (lineNumberArea) {
+        lineNumberArea->setVisible(true);
+        updateLineNumberAreaWidth();
+    }
+}
+
+void EditorWindow::handleTextChanged() {
+    if (!showingSplash) {  // Only mark changes when not showing splash screen
+        // Mark as unsaved only if the content actually changed
+        QString currentText = editor->toPlainText();
+        if (!currentFile.isEmpty()) {
+            QFile file(currentFile);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QString savedText = QTextStream(&file).readAll();
+                unsavedChanges = (currentText != savedText);
+                updateTitle();
+                file.close();
+            }
+        } else {
+            // For new files, mark as unsaved if there's any content
+            unsavedChanges = !currentText.isEmpty();
+            updateTitle();
+        }
+    }
+}
+
+void EditorWindow::updateSyntaxHighlighting() {
+    if (!currentFile.isEmpty()) {
+        QString extension = QFileInfo(currentFile).suffix().toLower();
+        CodeHighlighter::Language hlLang = CodeHighlighter::None;
+        IndentManager::Language indentLang = IndentManager::None;
+        
+        if (extension == "cpp" || extension == "h" || extension == "hpp" || extension == "c" || extension == "cc") {
+            hlLang = CodeHighlighter::CPP;
+            indentLang = IndentManager::CPP;
+        } else if (extension == "py") {
+            hlLang = CodeHighlighter::Python;
+            indentLang = IndentManager::Python;
+        }
+        
+        highlighter->setLanguage(hlLang);
+        indentManager->setLanguage(indentLang);
+    } else {
+        highlighter->setLanguage(CodeHighlighter::None);
+        indentManager->setLanguage(IndentManager::None);
+    }
+}
+
+bool EditorWindow::saveFile() {
     qDebug() << "Save file triggered, current unsavedChanges:" << unsavedChanges;  // Debug output
     if (currentFile.isEmpty()) {
         saveFileAs();  // If no file path yet, prompt for save location
     } else {
         saveToFile(currentFile);  // Save to existing file
     }
+    
     qDebug() << "Save completed, unsavedChanges:" << unsavedChanges;  // Debug output
+    return true;
 }
 
 void EditorWindow::saveFileAs() {
@@ -438,7 +439,13 @@ bool EditorWindow::saveToFile(const QString& filePath) {
 
 void EditorWindow::openFile() {
     if (maybeSave()) {  // Only check for save if there are actual changes
-        QString filePath = QFileDialog::getOpenFileName(this);
+        QString filePath = QFileDialog::getOpenFileName(
+            this,
+            "Open File",
+            QString(),
+            "All Files (*.*)"
+        );
+        
         if (!filePath.isEmpty()) {
             loadFile(filePath);
         }
@@ -499,6 +506,42 @@ void EditorWindow::updateZoom(int delta) {
     }
 }
 
+void EditorWindow::showPreferences() {
+    PreferencesDialog dialog(editor->font(), this);
+    
+    if (dialog.exec() == QDialog::Accepted) {
+        QFont newFont = dialog.getSelectedFont();
+        
+        // Save font settings
+        QSettings settings("Focused Editor", "Editor");
+        settings.setValue("font/family", newFont.family());
+        settings.setValue("font/size", newFont.pointSize());
+        
+        // Update editor font
+        editor->setFont(newFont);
+        editor->document()->setDefaultFont(newFont);
+        currentZoom = newFont.pointSize();
+        
+        // Update theme to ensure proper styling
+        updateTheme();
+    }
+}
+
+void EditorWindow::updateTitle() {
+    QString title = "Focused Editor";
+    
+    if (!currentFile.isEmpty()) {
+        QFileInfo fileInfo(currentFile);
+        title = fileInfo.fileName() + " - " + title;
+    }
+    
+    if (unsavedChanges) {
+        title = "*" + title;
+    }
+    
+    setWindowTitle(title);
+}
+
 bool EditorWindow::eventFilter(QObject* obj, QEvent* event) {
     if (obj == editor) {
         if (event->type() == QEvent::KeyPress) {
@@ -543,5 +586,44 @@ void EditorWindow::closeEvent(QCloseEvent* event) {
         event->accept();
     } else {
         event->ignore();
+    }
+}
+
+void EditorWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    updateLineNumberAreaWidth();  // Update line number area on resize
+}
+
+void EditorWindow::loadFile(const QString& filePath) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Error", "Cannot open file: " + file.errorString());
+        return;
+    }
+
+    QTextStream in(&file);
+    QString content = in.readAll();
+    
+    // First hide splash screen (this will also clear readonly flag)
+    hideSplashScreen();
+    
+    // Then set content and update state
+    editor->setPlainText(content);
+    currentFile = filePath;
+    unsavedChanges = false;
+    
+    // Make sure editor is editable and has focus
+    editor->setReadOnly(false);
+    editor->moveCursor(QTextCursor::Start);
+    editor->setFocus();
+    
+    // Update UI
+    updateTitle();
+    updateSyntaxHighlighting();
+    
+    // Show line numbers when loading a file
+    if (lineNumberArea) {
+        lineNumberArea->setVisible(true);
+        updateLineNumberAreaWidth();
     }
 }
