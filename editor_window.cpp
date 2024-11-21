@@ -24,7 +24,7 @@
 EditorWindow::EditorWindow(QWidget* parent)
     : QMainWindow(parent)
     , unsavedChanges(false)
-    , currentZoom(13)  // Initialize directly instead of using defaultFontSize
+    , currentZoom(13)  // Reset to default 13pt
     , showingSplash(false)
 {
     setMinimumSize(400, 300);
@@ -105,13 +105,21 @@ void EditorWindow::setupShortcuts() {
     connect(fullscreenAction, &QAction::triggered, this, &EditorWindow::toggleFullscreen);
     addAction(fullscreenAction);
     
+    // Zoom in with Cmd + =
     QAction* zoomInAction = new QAction(this);
-    zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    zoomInAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Equal));
     connect(zoomInAction, &QAction::triggered, this, &EditorWindow::zoomIn);
     addAction(zoomInAction);
     
+    // Alternative zoom in with Cmd + Shift + =
+    QAction* altZoomInAction = new QAction(this);
+    altZoomInAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Equal));
+    connect(altZoomInAction, &QAction::triggered, this, &EditorWindow::zoomIn);
+    addAction(altZoomInAction);
+    
+    // Zoom out with Cmd + -
     QAction* zoomOutAction = new QAction(this);
-    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    zoomOutAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus));
     connect(zoomOutAction, &QAction::triggered, this, &EditorWindow::zoomOut);
     addAction(zoomOutAction);
     
@@ -149,7 +157,7 @@ void EditorWindow::updateTheme() {
     // Load saved font settings
     QSettings settings("Focused Editor", "Editor");
     QString fontFamily = settings.value("font/family", "Menlo").toString();
-    int fontSize = settings.value("font/size", defaultFontSize).toInt();
+    int fontSize = settings.value("font/size", 13).toInt();  // Changed default to 13pt
     
     QFont font(fontFamily, fontSize);
     font.setStyleHint(QFont::Monospace);
@@ -482,15 +490,16 @@ void EditorWindow::toggleFullscreen() {
 }
 
 void EditorWindow::zoomIn() {
-    updateZoom(2);
+    updateZoom(2);  
 }
 
 void EditorWindow::zoomOut() {
-    updateZoom(-2);
+    updateZoom(-2);  
 }
 
 void EditorWindow::resetZoom() {
-    currentZoom = 13;
+    QSettings settings("Focused Editor", "Editor");
+    currentZoom = settings.value("font/size", 13).toInt();  // Use default font size from settings
     QFont font = editor->font();
     font.setPointSize(currentZoom);
     editor->setFont(font);
@@ -498,7 +507,7 @@ void EditorWindow::resetZoom() {
 
 void EditorWindow::updateZoom(int delta) {
     int newSize = currentZoom + delta;
-    if (newSize >= 8 && newSize <= 24) {
+    if (newSize >= 8 && newSize <= 144) {  
         currentZoom = newSize;
         QFont font = editor->font();
         font.setPointSize(currentZoom);
