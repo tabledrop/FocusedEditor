@@ -28,5 +28,4 @@ target_link_libraries(focused_editor PRIVATE Qt6::Widgets)
 
 set_target_properties(focused_editor PROPERTIES
     WIN32_EXECUTABLE ON
-    MACOSX_BUNDLE ON
 )
