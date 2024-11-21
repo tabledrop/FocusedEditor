@@ -12,7 +12,7 @@ A minimalist, distraction-free text editor built with Qt6 and C++. This editor i
 - File change tracking with unsaved changes indicator
 - Native macOS look and feel
 - System theme support (light/dark mode)
-- Text zoom functionality
+- Text zoom functionality (default 13pt font size)
 - Font customization through preferences
 - Vim-style welcome screen
 
@@ -32,9 +32,11 @@ brew install qt@6
 
 2. Clone the repository and build:
 ```bash
+git clone <repository-url>
+cd focused-editor
 mkdir build
 cd build
-cmake -DCMAKE_PREFIX_PATH=/usr/local/opt/qt@6 ..
+cmake ..
 cmake --build .
 ```
 
@@ -54,9 +56,10 @@ The editor is designed to be keyboard-driven for minimal disruption to your writ
 | ⌘ + O | Open file |
 | ⌃ + ⇧ + F | Toggle full-screen mode |
 | ⌘ + Q | Quit |
-| ⌘ + = or ⌘ + + | Zoom in |
+| ⌘ + = | Zoom in |
+| ⌘ + ⇧ + = | Alternative zoom in |
 | ⌘ + - | Zoom out |
-| ⌘ + 0 | Reset zoom |
+| ⌘ + 0 | Reset zoom to default size |
 | ⌘ + , | Open preferences |
 
 ## Preferences
