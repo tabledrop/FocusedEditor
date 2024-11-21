@@ -32,7 +32,7 @@ brew install qt@6
 
 2. Clone the repository and build:
 ```bash
-git clone <repository-url>
+git clone https://github.com/tabledrop/focused-editor
 cd focused-editor
 mkdir build
 cd build
