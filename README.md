@@ -18,13 +18,47 @@ A minimalist, distraction-free text editor built with Qt6 and C++. This editor i
 
 ## Requirements
 
-- macOS
+- Windows or macOS
 - Qt 6.x
 - CMake 3.16 or higher
 - C++17 compatible compiler
+  - Windows: MSVC 2019/2022 or MinGW
+  - macOS: Clang
 
 ## Installation
 
+### Windows
+
+1. Install Qt6 from [Qt's official website](https://www.qt.io/download)
+
+2. Clone and build:
+```bash
+git clone https://github.com/tabledrop/focused-editor
+cd focused-editor
+mkdir build
+cd build
+
+# If using MSVC:
+cmake -B . -S .. -DQt6_DIR="PathTo:/Qt/6.x.x/msvc2022_64/lib/cmake/Qt6"
+cmake --build .
+
+# If using MinGW:
+cmake -B . -S .. -DQt6_DIR="PathTo:/Qt/6.x.x/mingw_64/lib/cmake/Qt6" -G "MinGW Makefiles"
+cmake --build .
+```
+
+3. Deploy the application:
+```bash
+# Copy required Qt DLLs (replace path with your Qt installation)
+PathTo:\Qt\6.x.x\msvc2022_64\bin\windeployqt.exe .\Debug\focused_editor.exe
+```
+
+4. Run the editor:
+```bash
+.\Debug\focused_editor.exe
+```
+
+### macOS
 1. Install Qt6 using Homebrew:
 ```bash
 brew install qt@6
@@ -47,24 +81,24 @@ cmake --build .
 
 ## Keyboard Shortcuts
 
-The editor is designed to be keyboard-driven for minimal disruption to your writing flow:
+The editor supports both Windows and macOS keyboard shortcuts:
 
-| Shortcut | Action |
-|----------|--------|
-| ⌘ + S | Save current file |
-| ⌘ + ⇧ + S | Save As |
-| ⌘ + O | Open file |
-| ⌃ + ⇧ + F | Toggle full-screen mode |
-| ⌘ + Q | Quit |
-| ⌘ + = | Zoom in |
-| ⌘ + ⇧ + = | Alternative zoom in |
-| ⌘ + - | Zoom out |
-| ⌘ + 0 | Reset zoom to default size |
-| ⌘ + , | Open preferences |
+| Action | Windows | macOS |
+|--------|---------|-------|
+| Save | Ctrl + S | ⌘ + S |
+| Save As | Ctrl + Shift + S | ⌘ + ⇧ + S |
+| Open file | Ctrl + O | ⌘ + O |
+| Full-screen | Ctrl + Shift + F | ⌃ + ⇧ + F |
+| Quit | Alt + F4 | ⌘ + Q |
+| Zoom in | Ctrl + = | ⌘ + = |
+| Zoom in (alt) | Ctrl + Shift + = | ⌘ + ⇧ + = |
+| Zoom out | Ctrl + - | ⌘ + - |
+| Reset zoom | Ctrl + 0 | ⌘ + 0 |
+| Preferences | Ctrl + , | ⌘ + , |
 
 ## Preferences
 
-Access the preferences menu using ⌘ + , to customize:
+Access the preferences menu using Ctrl + , (Windows) or ⌘ + , (macOS) to customize:
 - Font family (filtered to show only monospace fonts)
 - Font size
 - Live preview of font changes
@@ -84,7 +118,7 @@ This project is built with:
 - Qt6 for the GUI
 - CMake for build management
 
-The codebase is organized into three main files:
+The codebase is organized into multiple files:
 - `main.cpp`: Application entry point
 - `editor_window.h`: Editor window class declaration
 - `editor_window.cpp`: Editor window implementation

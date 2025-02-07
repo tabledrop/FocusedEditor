@@ -308,8 +308,12 @@ void EditorWindow::showSplashScreen() {
     cursor.insertText("\n");
     cursor.insertBlock(centerFormat);
     
-    // Instructions
-    cursor.insertText("Press Cmd+O to open a file");
+    // Instructions with platform-specific shortcuts
+    #ifdef Q_OS_MAC
+        cursor.insertText("Press Cmd+O to open a file");
+    #else
+        cursor.insertText("Press Ctrl+O to open a file");
+    #endif
     cursor.insertBlock(centerFormat);
     cursor.insertText("- or -");
     cursor.insertBlock(centerFormat);
